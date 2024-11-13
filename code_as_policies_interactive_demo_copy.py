@@ -1644,6 +1644,7 @@ while True:
       video_address = input()
       print("enter your query")
       user_query = input()
+      user_query = f'{prompt_video}\n{user_query}'
       description = get_video_description(video_address,user_query)
       print(description)
   user_input = f'{input()}{description}' #@param {allow-input: true, type:"string"}
