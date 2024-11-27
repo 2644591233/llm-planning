@@ -415,7 +415,7 @@ class Robotiq2F85:
     self.activated = False
 
     # Connect gripper base to robot tool.
-    pybullet.createConstraint(self.robot, tool, self.body, 0, jointType=pybullet.JOINT_FIXED, jointAxis=[0, 0, 0], parentFramePosition=[0, 0, 0], childFramePosition=[0, 0, -0.07], childFrameOrientation=pybullet.getQuaternionFromEuler([0, 0, np.pi / 2]))
+    pybullet.createConstraint(self.robot, tool, self.body, 0, jointType=pybullet.JOINT_FIXED, jointAxis=[0, 0, 0], parentFramePosition=[0, 0, 0], childFramePosition=[0, 0, -0.07], childFrameOrientation=pybullet.getQuaternionFromEuler([0, 0, np.pi/2]))
 
     # Set friction coefficients for gripper fingers.
     for i in range(pybullet.getNumJoints(self.body)):
@@ -504,7 +504,8 @@ class PickPlaceEnv():
     # Configure and start PyBullet.
     # python3 -m pybullet_utils.runServer
     # pybullet.connect(pybullet.SHARED_MEMORY)  # pybullet.GUI for local GUI.
-    pybullet.connect(pybullet.DIRECT)  # pybullet.GUI for local GUI.
+    pybullet.connect(pybullet.GUI)  # pybullet.GUI for local GUI.
+    pybullet.resetDebugVisualizerCamera(cameraDistance=2,cameraYaw=0,cameraPitch=-40,cameraTargetPosition=[0.5,-0.9,0.5])#转变视角
     pybullet.configureDebugVisualizer(pybullet.COV_ENABLE_GUI, 0)
     pybullet.setPhysicsEngineParameter(enableFileCaching=0)
     assets_path = os.path.dirname(os.path.abspath(""))
@@ -609,13 +610,15 @@ class PickPlaceEnv():
       targetPositions=joints,
       positionGains=[0.01]*6)
 
-  def movep(self, position):
+  def movep(self, position,orientation = None):
     """Move to target end effector position."""
+    if orientation == None:
+      orientation = [np.pi,0,np.pi]
     joints = pybullet.calculateInverseKinematics(
         bodyUniqueId=self.robot_id,
         endEffectorLinkIndex=self.tip_link_id,
         targetPosition=position,
-        targetOrientation=pybullet.getQuaternionFromEuler(self.home_ee_euler),
+        targetOrientation=pybullet.getQuaternionFromEuler(orientation), ##if we need action push, just change ending orientation
         maxNumIterations=100)
     self.servoj(joints)
 
@@ -626,9 +629,9 @@ class PickPlaceEnv():
   def step(self, action=None):
     """Do pick and place motion primitive."""
     pick_pos, place_pos = action['pick'].copy(), action['place'].copy()
-
+    print(pick_pos, place_pos)
     # Set fixed primitive z-heights.
-    hover_xyz = np.float32([pick_pos[0], pick_pos[1], 0.2])
+    hover_xyz = np.float32([pick_pos[0], pick_pos[1], pick_pos[2]+0.025])
     if pick_pos.shape[-1] == 2:
       pick_xyz = np.append(pick_pos, 0.025)
     else:
@@ -719,8 +722,8 @@ class PickPlaceEnv():
 
   def get_camera_image(self):
     if not self.high_res:
-      image_size = (240, 240)
-      intrinsics = (120., 0, 120., 0, 120., 120., 0, 0, 1)
+      image_size = (180, 180)
+      intrinsics = (120., 0, 120., 0, 120., 120., 0, 0, 1) ##180 120
     else:
       image_size=(360, 360)
       intrinsics=(180., 0, 180., 0, 180., 180., 0, 0, 1)
@@ -979,7 +982,7 @@ class LMP_wrapper():
 
   def get_obj_pos(self, obj_name):
     # return the xy position of the object in robot base frame
-    return self.env.get_obj_pos(obj_name)[:2]
+    return self.env.get_obj_pos(obj_name)[:3]
 
   def get_obj_position_np(self, obj_name):
     return self.get_pos(obj_name)
@@ -1615,48 +1618,48 @@ def setup_LMP(env, cfg_tabletop):
 
   return lmp_tabletop_ui
 
+if __name__ == "__main__":
+  #@title Initialize Env { vertical-output: true }
+  num_blocks = 3 #@param {type:"slider", min:0, max:4, step:1}
+  num_bowls = 3 #@param {type:"slider", min:0, max:4, step:1}
+  high_resolution = False #@param {type:"boolean"}
+  high_frame_rate = False #@param {type:"boolean"}
 
-#@title Initialize Env { vertical-output: true }
-num_blocks = 3 #@param {type:"slider", min:0, max:4, step:1}
-num_bowls = 3 #@param {type:"slider", min:0, max:4, step:1}
-high_resolution = False #@param {type:"boolean"}
-high_frame_rate = False #@param {type:"boolean"}
+  # setup env and LMP
+  env = PickPlaceEnv(render=True, high_res=high_resolution, high_frame_rate=high_frame_rate)
+  block_list = np.random.choice(ALL_BLOCKS, size=num_blocks, replace=False).tolist()
+  bowl_list = np.random.choice(ALL_BOWLS, size=num_bowls, replace=False).tolist()
+  obj_list = block_list + bowl_list
+  _ = env.reset(obj_list)
+  lmp_tabletop_ui = setup_LMP(env, cfg_tabletop)
 
-# setup env and LMP
-env = PickPlaceEnv(render=True, high_res=high_resolution, high_frame_rate=high_frame_rate)
-block_list = np.random.choice(ALL_BLOCKS, size=num_blocks, replace=False).tolist()
-bowl_list = np.random.choice(ALL_BOWLS, size=num_bowls, replace=False).tolist()
-obj_list = block_list + bowl_list
-_ = env.reset(obj_list)
-lmp_tabletop_ui = setup_LMP(env, cfg_tabletop)
+  # display env
+  cv2_imshow(cv2.cvtColor(env.get_camera_image(), cv2.COLOR_BGR2RGB))
 
-# display env
-cv2_imshow(cv2.cvtColor(env.get_camera_image(), cv2.COLOR_BGR2RGB))
+  print('available objects:')
+  print(obj_list)
+  description = ''
+  #@title Interactive Demo { vertical-output: true }
+  while True:
+    print("do you need video learning(Y/N)")
+    if(input()=='Y'):
+        print("enter your video address")
+        video_address = input()
+        print("enter your query")
+        user_query = input()
+        user_query = f'{prompt_video}\n{user_query}'
+        description = get_video_description(video_address,user_query)
+        print(description)
+    user_input = f'{input()}{description}' #@param {allow-input: true, type:"string"}
 
-print('available objects:')
-print(obj_list)
-description = ''
-#@title Interactive Demo { vertical-output: true }
-while True:
-  print("do you need video learning(Y/N)")
-  if(input()=='Y'):
-      print("enter your video address")
-      video_address = input()
-      print("enter your query")
-      user_query = input()
-      user_query = f'{prompt_video}\n{user_query}'
-      description = get_video_description(video_address,user_query)
-      print(description)
-  user_input = f'{input()}{description}' #@param {allow-input: true, type:"string"}
+    env.cache_video = []
 
-  env.cache_video = []
+    print('Running policy and recording video...')
+    ##
+    lmp_tabletop_ui(user_input, f'objects = {env.object_list}')
 
-  print('Running policy and recording video...')
-  ##
-  lmp_tabletop_ui(user_input, f'objects = {env.object_list}')
-
-  # render video
-  if env.cache_video:
-    rendered_clip = ImageSequenceClip(env.cache_video, fps=35 if high_frame_rate else 25)
-    looped_clip = rendered_clip.loop(n=50)
-    looped_clip.write_videofile("looped_video.mp4", codec="libx264")
+    # render video
+    if env.cache_video:
+      rendered_clip = ImageSequenceClip(env.cache_video, fps=35 if high_frame_rate else 25)
+      looped_clip = rendered_clip.loop(n=50)
+      looped_clip.write_videofile("looped_video.mp4", codec="libx264")
