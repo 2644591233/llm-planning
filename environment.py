@@ -15,7 +15,7 @@ class Robotiq2F85:
     self.tool = tool
     pos = [0.1339999999999999, -0.49199999999872496, 0.5]
     rot = pybullet.getQuaternionFromEuler([np.pi, 0, np.pi])
-    urdf = 'robotiq_2f_85/robotiq_2f_85.urdf'
+    urdf = 'source/robotiq_2f_85/robotiq_2f_85.urdf'
     self.body = pybullet.loadURDF(urdf, pos, rot)
     self.n_joints = pybullet.getNumJoints(self.body)
     self.activated = False
@@ -139,8 +139,8 @@ class PickPlaceEnv():
 
     # Add robot.
     self.table_id = pybullet.loadURDF("plane.urdf", [0, 0, -0.001])
-    self.robot_id = pybullet.loadURDF("ur5e/ur5e.urdf", [0, 0, 0], flags=pybullet.URDF_USE_MATERIAL_COLORS_FROM_MTL)
-    self.ghost_id = pybullet.loadURDF("ur5e/ur5e.urdf", [0, 0, -10])  # For forward kinematics.
+    self.robot_id = pybullet.loadURDF("source/ur5e/ur5e.urdf", [0, 0, 0], flags=pybullet.URDF_USE_MATERIAL_COLORS_FROM_MTL)
+    self.ghost_id = pybullet.loadURDF("source/ur5e/ur5e.urdf", [0, 0, -10])  # For forward kinematics.
     self.joint_ids = [pybullet.getJointInfo(self.robot_id, i) for i in range(pybullet.getNumJoints(self.robot_id))]
     self.joint_ids = [j[0] for j in self.joint_ids if j[2] == pybullet.JOINT_REVOLUTE]
 
@@ -191,14 +191,14 @@ class PickPlaceEnv():
           object_id = pybullet.createMultiBody(0.01, object_shape, object_visual, basePosition=object_position)
         elif object_type == 'bowl':
           object_position[2] = 0
-          object_id = pybullet.loadURDF("bowl/bowl.urdf", object_position, useFixedBase=1)
+          object_id = pybullet.loadURDF("source/bowl/bowl.urdf", object_position, useFixedBase=1)
         elif object_type == 'penpot':
           object_position[2] = 0  # 锁定笔筒z轴坐标为0
 
           # 视觉属性
           visual_ind = pybullet.createVisualShape(
               shapeType=pybullet.GEOM_MESH,
-              fileName="PenPot/PenPot.obj",
+              fileName="source/PenPot/PenPot.obj",
               rgbaColor=[1, 1, 1, 1],
               specularColor=[0.4, 0.4, 0],
               visualFramePosition=[0, 0, 0],
@@ -211,7 +211,7 @@ class PickPlaceEnv():
           
           collision_ind = pybullet.createCollisionShape(
               shapeType=pybullet.GEOM_MESH, 
-              fileName="PenPot/PenPot_vhacd.obj",
+              fileName="source/PenPot/PenPot_vhacd.obj",
               collisionFramePosition=[0, 0, 0], 
               collisionFrameOrientation=pybullet.getQuaternionFromEuler([0, 0, 0]),
               meshScale=[0.03, 0.03, 0.03]
@@ -229,7 +229,7 @@ class PickPlaceEnv():
             # 视觉属性
             visual_ind = pybullet.createVisualShape(
                             shapeType=pybullet.GEOM_MESH,
-                            fileName="pencil/pencil.obj",
+                            fileName="source/pencil/pencil.obj",
                             rgbaColor=[1, 1, 1, 1],
                             specularColor=[0.4, 0.4, 0],
                             visualFramePosition=[0, 0, 0],
@@ -238,7 +238,7 @@ class PickPlaceEnv():
                         # 碰撞属性
             collision_ind = pybullet.createCollisionShape(
                             shapeType=pybullet.GEOM_MESH,
-                            fileName="pencil/pencil.obj",
+                            fileName="source/pencil/pencil.obj",
                             collisionFramePosition=[0, 0, 0],
                             meshScale=[0.0005, 0.0005, 0.0003])
 
