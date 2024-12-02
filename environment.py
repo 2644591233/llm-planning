@@ -72,11 +72,16 @@ class Robotiq2F85:
 
   # Return if body is in contact with something other than gripper
   def external_contact(self, body=None):
+    pts_body_contact = []
     if body is None:
       body = self.body
     pts = pybullet.getContactPoints(bodyA=body)
     pts = [pt for pt in pts if pt[2] != self.body]
-    return len(pts) > 0  # pylint: disable=g-explicit-length-test
+    if body != self.body:
+      pts_body_contact = pybullet.getContactPoints(bodyA=self.body)
+      pts_body_contact = [pt for pt in pts_body_contact if pt[2] != body and pt[2] != self.body]
+      print("contact points:", pts_body_contact)
+    return (len(pts) > 0) or (len(pts_body_contact) > 0) # pylint: disable=g-explicit-length-test
 
   def check_grasp(self):
     while self.moving():
@@ -235,7 +240,7 @@ class PickPlaceEnv():
                             visualFramePosition=[0, 0, 0],
                             meshScale=[0.0005, 0.0005, 0.0003])
 
-                        # 碰撞属性
+                        # 碰撞属性5
             collision_ind = pybullet.createCollisionShape(
                             shapeType=pybullet.GEOM_MESH,
                             fileName="source/pencil/pencil.obj",
@@ -301,8 +306,14 @@ class PickPlaceEnv():
     pick_pos, place_pos = action['pick'].copy(), action['place'].copy()
     if isinstance(action['arg1'],str):
       arg1 = action['arg1']
+      arg1_id = self.obj_name_to_id[arg1]
+    else:
+      arg1_id = action['arg1']
     if isinstance(action['arg2'],str):
       arg2 = action['arg2']
+      arg2_id = self.obj_name_to_id[arg2]
+    else:
+      arg2_id = action['arg2']
     print(pick_pos, place_pos)
     # Set fixed primitive z-heights.
     hover_xyz = np.float32([pick_pos[0], pick_pos[1], 0.02])
@@ -324,7 +335,10 @@ class PickPlaceEnv():
       ee_xyz = self.get_ee_pos()
 
     while np.linalg.norm(pick_xyz - ee_xyz) > 0.01:
-      self.movep(pick_xyz,orientation=[np.pi,0,pybullet.getEulerFromQuaternion(targetOrientation)[2]])
+      if arg1.find('pencil') != -1:
+        self.movep(pick_xyz,orientation=[np.pi,0,pybullet.getEulerFromQuaternion(targetOrientation)[2]])
+      else:
+        self.movep(pick_xyz)
       self.step_sim_and_render()
       ee_xyz = self.get_ee_pos()
 
@@ -333,7 +347,10 @@ class PickPlaceEnv():
     for _ in range(240):
       self.step_sim_and_render()
     while np.linalg.norm(hover_xyz - ee_xyz) > 0.01:
-      self.movep(hover_xyz,orientation=[np.pi,0,pybullet.getEulerFromQuaternion(targetOrientation)[2]])
+      if arg1.find('pencil') != -1:
+        self.movep(hover_xyz,orientation=[np.pi,0,pybullet.getEulerFromQuaternion(targetOrientation)[2]])
+      else:
+        self.movep(hover_xyz)  
       self.step_sim_and_render()
       ee_xyz = self.get_ee_pos()
 
@@ -341,16 +358,20 @@ class PickPlaceEnv():
       self.step_sim_and_render()
 
     # Move to place location.
-    while np.linalg.norm(place_xyz - ee_xyz) > 0.01:
-      self.movep(place_xyz,orientation=[np.pi,0,pybullet.getEulerFromQuaternion(targetOrientation)[2]])
+    while np.linalg.norm(place_xyz - ee_xyz) > 0.001:
+      if arg1.find('pencil') != -1:
+        self.movep(place_xyz,orientation=[np.pi,0,pybullet.getEulerFromQuaternion(targetOrientation)[2]])
+      else:
+        self.movep(place_xyz)
       self.step_sim_and_render()
       ee_xyz = self.get_ee_pos()
     # Place down object.
-    arg2_id = self.obj_name_to_id[arg2]
-    while (not self.gripper.detect_contact()) and (place_xyz[2] > 0.03) and not bool(pybullet.getContactPoints(bodyA = arg2_id, bodyB = self.gripper.body)):
-      print(pybullet.getContactPoints(bodyA = arg2_id, bodyB = self.gripper.body),"\nthat is all")
+    while (not self.gripper.detect_contact()) and (place_xyz[2] > 0.03) and (not bool(pybullet.getContactPoints(bodyA = self.robot_id, bodyB = self.table_id))):
       place_xyz[2] -= 0.001
-      self.movep(place_xyz,orientation=[np.pi/2,0,pybullet.getEulerFromQuaternion(targetOrientation)[2]])
+      if arg1.find("pencil") != -1:
+        self.movep(place_xyz,orientation=[np.pi/2,0,pybullet.getEulerFromQuaternion(targetOrientation)[2]])
+      else: 
+        self.movep(place_xyz)
       for _ in range(3):
         self.step_sim_and_render()
 
@@ -360,9 +381,12 @@ class PickPlaceEnv():
 
     place_xyz[2] += 0.2
     while np.linalg.norm(place_xyz - ee_xyz) > 0.01:
-       self.movep(place_xyz,orientation=[np.pi/2,0,pybullet.getEulerFromQuaternion(targetOrientation)[2]])
-       self.step_sim_and_render()
-       ee_xyz = self.get_ee_pos()
+      if arg1.find("pencil") != -1:
+        self.movep(place_xyz,orientation=[np.pi/2,0,pybullet.getEulerFromQuaternion(targetOrientation)[2]])
+      else:
+        self.movep(place_xyz)
+      self.step_sim_and_render()
+      ee_xyz = self.get_ee_pos()
     
       
     ee_xyz = self.get_ee_pos()
