@@ -3,11 +3,11 @@ import time
 import pybullet_data
 import numpy as np
 import math
-from code_as_policies_interactive_demo_copy import Robotiq2F85
-from code_as_policies_interactive_demo_copy import PickPlaceEnv as env
+from environment import Robotiq2F85
+from environment import PickPlaceEnv as env
 
-half_plane_length = 1
-half_plane_width = 1
+half_plane_length = 0.3
+half_plane_width = 0.3
 half_plane_thick = 0.001
 # # Global constants: pick and place objects, colors, workspace bounds
 COLORS = {
@@ -42,83 +42,89 @@ PIXEL_SIZE = 0.00267857
 BOUNDS = np.float32([[-0.3, 0.3], [-0.8, -0.2], [0, 0.15]])  # X Y Z
 
 
-def pushstep(self, action=None):
+
+def get_ee_pos(robot_id, tip_link_id):
+    ee_xyz = np.float32(pybullet.getLinkState(robot_id, tip_link_id)[0])
+    return ee_xyz
+
+def check_proximity(robot, tool, body):
+    ee_pos = np.array(pybullet.getLinkState(robot, tool)[0])
+    tool_pos = np.array(pybullet.getLinkState(body, 0)[0])  
+    vec = (tool_pos - ee_pos) / np.linalg.norm((tool_pos - ee_pos))
+    ee_targ = ee_pos + vec
+    ray_data = pybullet.rayTest(ee_pos, ee_targ)[0]
+    obj, link, ray_frac = ray_data[0], ray_data[1], ray_data[2]
+    return obj, link, ray_frac
+
+def pushstep(gripper, robot_id, tip_link_id, start_orientation=None, end_orientation=None, action=None ):
     """push sth to target place"""
     # reserve a delta distance
-    pick_pos, place_pos = action['pick'].copy(), action['push'].copy()
-    delta_vector = (place_pos - pick_pos)/np.linalg.norm(place_pos - pick_pos)
+    
+    pick_pos, place_pos = np.array(action['pick'].copy()), np.array(action['push'].copy())
+    theta = np.arctan2(place_pos[1] - pick_pos[1],place_pos[0] - pick_pos[0])
     # Set fixed primitive z-heights.
-    hover_xyz = np.float32([pick_pos[0] + delta_vector[0], pick_pos[1] + delta_vector[1], pick_pos[2]])
-
-    orientation = []
+    
+    pick_pos[2] = max(0.18, pick_pos[2])
+    place_pos[2] = max(0.18, place_pos[2])
+    print("delta_vector:",delta_vector)
+    hover_xyz = np.float32([pick_pos[0] - np.sign(place_pos[0] - pick_pos[0])*np.cos(theta)*0.15, 
+                          pick_pos[1] - np.sign(place_pos[1] - pick_pos[1])*np.sin(theta)*0.15, pick_pos[2]])
+    pick_pos = np.float32([pick_pos[0] + np.sign(place_pos[0] - pick_pos[0])*np.cos(theta)*0.02, 
+                          pick_pos[1] + np.sign(place_pos[1] - pick_pos[1])*np.sin(theta)*0.02, pick_pos[2]])
     if pick_pos.shape[-1] == 2:
       pick_xyz = np.append(pick_pos, 0.025)
     else:
       pick_xyz = pick_pos
-      pick_xyz[2] = 0.025
     if place_pos.shape[-1] == 2:
       place_xyz = np.append(place_pos, 0.15)
     else:
       place_xyz = place_pos
-      place_xyz[2] = 0.15
-
+    print("place_xyz:",place_xyz,"pick_xyz:",pick_xyz,"hover_xyz:",hover_xyz)
     # Move to object.
-    ee_xyz = env.get_ee_pos()
+    ee_xyz = get_ee_pos(robot_id, tip_link_id)
     while np.linalg.norm(hover_xyz - ee_xyz) > 0.01:
-      env.movep(hover_xyz, orientation)
-      env.step_sim_and_render()
-      ee_xyz = env.get_ee_pos()
-
-    while np.linalg.norm(pick_xyz - ee_xyz) > 0.01:
-      env.movep(pick_xyz)
-      env.step_sim_and_render()
-      ee_xyz = env.get_ee_pos()
-
-    # Pick up object.
-    self.gripper.activate()
+      movep(hover_xyz, start_orientation)
+      pybullet.stepSimulation()
+      time.sleep(1./100.)
+      ee_xyz = get_ee_pos(robot_id, tip_link_id)
+      print(ee_xyz)
+    print('moving to init done')
+    while np.linalg.norm(pick_xyz - ee_xyz) > 0.001:
+      movep(pick_xyz,start_orientation)
+      pybullet.stepSimulation()
+      time.sleep(1./100.)
+      ee_xyz = get_ee_pos(robot_id, tip_link_id)
+      print('ee_location:',ee_xyz,'we need:',pick_xyz)
+    print('moving to obj done')
+    # Push object.
+    gripper.activate()
     for _ in range(240):
-      self.step_sim_and_render()
-    while np.linalg.norm(hover_xyz - ee_xyz) > 0.01:
-      self.movep(hover_xyz)
-      self.step_sim_and_render()
-      ee_xyz = self.get_ee_pos()
-
-    for _ in range(50):
-      self.step_sim_and_render()
-
+      pybullet.stepSimulation()
     # Move to place location.
+    
     while np.linalg.norm(place_xyz - ee_xyz) > 0.01:
-      self.movep(place_xyz)
-      self.step_sim_and_render()
-      ee_xyz = self.get_ee_pos()
-
-    # Place down object.
-    while (not self.gripper.detect_contact()) and (place_xyz[2] > 0.03):
-      place_xyz[2] -= 0.001
-      self.movep(place_xyz)
-      for _ in range(3):
-        self.step_sim_and_render()
-    self.gripper.release()
-    for _ in range(240):
-      self.step_sim_and_render()
-    place_xyz[2] = 0.2
-    ee_xyz = self.get_ee_pos()
+      movep(place_xyz, end_orientation)
+      pybullet.stepSimulation()
+      time.sleep(1./100.)
+      ee_xyz = get_ee_pos(robot_id, tip_link_id)
+    print('Push object done')
+    # reset the pose.
+    gripper.release()
+    for _ in range(400):
+      pybullet.stepSimulation()
+    ee_xyz = get_ee_pos(robot_id, tip_link_id)
+    while np.linalg.norm(pick_xyz - ee_xyz) > 0.01:
+      movep(pick_xyz, start_orientation)
+      pybullet.stepSimulation()
+      time.sleep(1./100.)
+      ee_xyz = get_ee_pos(robot_id, tip_link_id)
+    place_xyz  = np.float32([0, -0.5, 0.2])
     while np.linalg.norm(place_xyz - ee_xyz) > 0.01:
-      self.movep(place_xyz)
-      self.step_sim_and_render()
-      ee_xyz = self.get_ee_pos()
-    place_xyz = np.float32([0, -0.5, 0.2])
-    while np.linalg.norm(place_xyz - ee_xyz) > 0.01:
-      self.movep(place_xyz)
-      self.step_sim_and_render()
-      ee_xyz = self.get_ee_pos()
-
-    observation = self.get_observation()
-    reward = self.get_reward()
-    done = False
-    info = {}
-    return observation, reward, done, info
-
+      movep(place_xyz)
+      pybullet.stepSimulation()
+      time.sleep(1./1000.)
+      ee_xyz = get_ee_pos(robot_id, tip_link_id)
+    print('reset done')
 home_joints = (np.pi / 2, -np.pi / 2, np.pi / 2, -np.pi / 2, 3 * np.pi / 2, 0)  # ur5e Joint angles: (J0, J1, J2, J3, J4, J5). 
 home_ee_euler = (np.pi, 0, np.pi)  # gripper (RX, RY, RZ) rotation in Euler angles.
 ee_link_id = 9  # Link ID of UR5 end effector.
@@ -128,9 +134,9 @@ tip_link_id = 10  # Link ID of gripper finger tips.
 physicsClient = pybullet.connect(pybullet.GUI)#or p.DIRECT for non-graphical version
 pybullet.setAdditionalSearchPath(pybullet_data.getDataPath()) #optionally
 pybullet.setGravity(0,0,-9.81)
-pybullet.resetDebugVisualizerCamera(cameraDistance=2,cameraYaw=0,cameraPitch=-40,cameraTargetPosition=[0.5,-0.9,0.5])#转变视角
+pybullet.resetDebugVisualizerCamera(cameraDistance=1,cameraYaw=0,cameraPitch=-40,cameraTargetPosition=[0.1,-0.9,0.5])#转变视角
 planeId = pybullet.loadURDF("plane.urdf")
-robotId = pybullet.loadURDF("./ur5e/ur5e.urdf")
+robotId = pybullet.loadURDF("/source/ur5e/ur5e.urdf")
 joint_ids = [pybullet.getJointInfo(robotId, i) for i in range(pybullet.getNumJoints(robotId))]
 joint_ids = [j[0] for j in joint_ids if j[2] == pybullet.JOINT_REVOLUTE]
 
@@ -157,47 +163,31 @@ plane_visual = pybullet.createVisualShape(pybullet.GEOM_BOX, halfExtents=[half_p
 plane_id = pybullet.createMultiBody(0, plane_shape, plane_visual, basePosition=[0, -0.5, 0])
 pybullet.changeVisualShape(plane_id, -1, rgbaColor=[0.2, 0.2, 0.2, 1.0])
 start_pos = [ 0.04624302, -0.48661476,  0.3]
-target_pos = [ 0.13526691, -0.64376354,   0.3]
+target_pos = [0.23526691, -0.34376354,   0.15]
+obj_xyz = [ 0.13526691, -0.44376354,   0.15]
 
-obj_xyz = [ 0.13526691, -0.64376354,   0.1]
 object_color = COLORS['red']
-object_shape = pybullet.createCollisionShape(pybullet.GEOM_BOX, halfExtents=[0.1, 0.1, 0.1])
-object_visual = pybullet.createVisualShape(pybullet.GEOM_BOX, halfExtents=[0.1, 0.1, 0.1])
-object_id = pybullet.createMultiBody(0.01, object_shape, object_visual, basePosition=obj_xyz)
-pybullet.changeVisualShape(object_id, -1, rgbaColor=object_color)
+# object_shape = pybullet.createCollisionShape(pybullet.GEOM_BOX, halfExtents=[0.02, 0.02, 0.15])
+# object_visual = pybullet.createVisualShape(pybullet.GEOM_BOX, halfExtents=[0.02, 0.02, 0.15])
+# object_id = pybullet.createMultiBody(0.01, object_shape, object_visual, basePosition=obj_xyz)
+# pybullet.changeVisualShape(object_id, -1, rgbaColor=object_color)
+radius = 0.03  # 半径
+height = 0.3  # 高度
 
-# object_list = object_list
-#     self.obj_name_to_id = {}
-#     obj_xyz = start_pos
-#     for obj_name in object_list:
-#       if ('block' in obj_name) or ('bowl' in obj_name):
+# 创建圆柱的碰撞形状和视觉形状
+cylinder_collision_shape = pybullet.createCollisionShape(pybullet.GEOM_CYLINDER, radius=radius, height=height)
+cylinder_visual_shape = pybullet.createVisualShape(pybullet.GEOM_CYLINDER, radius=radius, length=height, rgbaColor=object_color)
 
-#         # Get random position 15cm+ from other objects.
-#         while True:
-#           rand_x = np.random.uniform(BOUNDS[0, 0] + 0.1, BOUNDS[0, 1] - 0.1)
-#           rand_y = np.random.uniform(BOUNDS[1, 0] + 0.1, BOUNDS[1, 1] - 0.1)
-#           rand_xyz = np.float32([rand_x, rand_y, 0.03]).reshape(1, 3)
-#           if len(obj_xyz) == 0:
-#             obj_xyz = np.concatenate((obj_xyz, rand_xyz), axis=0)
-#             break
-#           else:
-#             nn_dist = np.min(np.linalg.norm(obj_xyz - rand_xyz, axis=1)).squeeze()
-#             if nn_dist > 0.15:
-#               obj_xyz = np.concatenate((obj_xyz, rand_xyz), axis=0)
-#               break
+# 创建圆柱体
+cylinder_id = pybullet.createMultiBody(
+    baseMass=0.01,  # 质量
+    baseCollisionShapeIndex=cylinder_collision_shape,
+    baseVisualShapeIndex=cylinder_visual_shape,
+    basePosition=obj_xyz  # 圆柱底部放置在地面
+)
+pybullet.changeDynamics(cylinder_id, -1, lateralFriction=1, rollingFriction=0.5, spinningFriction=0.03)   # 横向摩擦力
 
-#         object_color = COLORS[obj_name.split(' ')[0]]
-#         object_type = obj_name.split(' ')[1]
-#         object_position = rand_xyz.squeeze()
-#         if object_type == 'block':
-#           object_shape = pybullet.createCollisionShape(pybullet.GEOM_BOX, halfExtents=[0.02, 0.02, 0.02])
-#           object_visual = pybullet.createVisualShape(pybullet.GEOM_BOX, halfExtents=[0.02, 0.02, 0.02])
-#           object_id = pybullet.createMultiBody(0.01, object_shape, object_visual, basePosition=object_position)
-#         elif object_type == 'bowl':
-#           object_position[2] = 0
-#           object_id = pybullet.loadURDF("bowl/bowl.urdf", object_position, useFixedBase=1)
-#         pybullet.changeVisualShape(object_id, -1, rgbaColor=object_color)
-#         self.obj_name_to_id[obj_name] = object_id
+
 def movep(position,orientation = None):
   if orientation == None:
     orientation = [np.pi, 0, np.pi]
@@ -207,18 +197,32 @@ def movep(position,orientation = None):
       targetOrientation=pybullet.getQuaternionFromEuler(orientation), ##if we need action push, just change ending orientation
       maxNumIterations=100)
   servoj(targetPositionsJoints)
+  
 def servoj(joints):  
   pybullet.setJointMotorControlArray(bodyIndex=robotId,
     jointIndices=joint_ids,
     controlMode=pybullet.POSITION_CONTROL,
     targetPositions=joints,
     positionGains=[0.01]*6)
+
+theta = np.arctan2(target_pos[1] - obj_xyz[1], target_pos[0] - obj_xyz[0])
+push_point = obj_xyz
+push_point_end = target_pos
+print("push_point:",push_point,"push_point_end:",push_point_end)
+delta_vector = np.array(push_point_end) - np.array(push_point)
+yaw = np.arctan2(delta_vector[1], delta_vector[0])
+start_orientation = [-np.pi/2, 0, yaw - np.pi/2] 
+end_orientation = [-np.pi/2, 0, yaw - np.pi/2]
+for i in range (10000):
+    pybullet.stepSimulation()
+pushstep(gripper, robotId, tip_link_id, start_orientation=start_orientation, 
+    end_orientation=end_orientation, 
+    action={'pick': push_point, 'push':push_point_end} )
 for i in range (500):
     pybullet.stepSimulation()
     if i % 50 == 0:
       print(np.float32(pybullet.getLinkState(robotId, tip_link_id)[0]))
     time.sleep(1./100.)
-print(pybullet.getEulerFromQuaternion(np.float32(pybullet.getLinkState(robotId, tip_link_id)[1])))
 while True:
     
     pybullet.stepSimulation()

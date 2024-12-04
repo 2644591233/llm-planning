@@ -179,7 +179,7 @@ put_first_on_second('red block', farthest_bowl_name)
 
 prompt_parse_obj_name = '''
 import numpy as np
-from env_utils import get_obj_pos, parse_position
+from env_utils.LMP_wrapper import get_obj_pos, parse_position
 from utils import get_obj_positions_np
 
 objects = ['blue block', 'cyan block', 'purple bowl', 'gray bowl', 'brown bowl', 'pink block', 'purple block']
@@ -248,7 +248,7 @@ prompt_parse_position = '''
 import numpy as np
 from shapely.geometry import *
 from shapely.affinity import *
-from env_utils import denormalize_xy, parse_obj_name, get_obj_names, get_obj_pos
+from env_utils.LMP_wrapper import denormalize_xy, parse_obj_name, get_obj_names, get_obj_pos
 
 # a 30cm horizontal line in the middle with 3 points.
 middle_pos = denormalize_xy([0.5, 0.5])

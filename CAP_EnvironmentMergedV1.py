@@ -37,10 +37,10 @@ def cv2_imshow(image):
   
 if __name__ == "__main__":
   #@title Initialize Env { vertical-output: true }
-  num_blocks = 1 #@param {type:"slider", min:0, max:4, step:1}
+  num_blocks = 3 #@param {type:"slider", min:0, max:4, step:1}
   num_bowls = 1 #@param {type:"slider", min:0, max:4, step:1}
   num_penpots = 1 #@param {type:"slider", min:0, max:4, step:1}
-  num_pencils = 3 #@param {type:"slider", min:0, max:4, step:1}
+  num_pencils = 1 #@param {type:"slider", min:0, max:4, step:1}
   high_resolution = True #@param {type:"boolean"}
   high_frame_rate = False #@param {type:"boolean"}
 
